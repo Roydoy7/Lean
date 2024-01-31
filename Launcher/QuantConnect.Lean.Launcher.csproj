@@ -53,6 +53,7 @@
     <ProjectReference Include="..\Indicators\QuantConnect.Indicators.csproj" />
     <ProjectReference Include="..\Common\QuantConnect.csproj" />
     <ProjectReference Include="..\Optimizer.Launcher\QuantConnect.Optimizer.Launcher.csproj" />
+    <ProjectReference Include="..\QuantConnect.Algorithm.R\QuantConnect.Algorithm.R.csproj" />
     <ProjectReference Include="..\Research\QuantConnect.Research.csproj" />
     <ProjectReference Include="..\Logging\QuantConnect.Logging.csproj" />
     <ProjectReference Include="..\Messaging\QuantConnect.Messaging.csproj" />
