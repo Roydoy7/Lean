@@ -658,3 +658,198 @@ strategy.close('target02_sell', when=target02_sel_close)
 
  */
 
+/*
+	This program was developed by Quantify and is a template program.
+	Usage and marketing of this program is permitted.
+	
+	www.quantify-co.com
+*/
+
+namespace QuantConnect.Algorithm.CSharp
+{
+    public class HorizontalTachyonChamber : QCAlgorithm
+    {
+        // ticker to be observed
+        private readonly string security = "SPY";
+        // resolution for the stock (works with all resolutions)
+        public readonly Resolution resolution = Resolution.Daily;
+
+        // tecnology sector variables
+        private ZigZagHighLow zzhl;
+
+        public override void Initialize()
+        {
+            // sets brokerage model to AlphaStreams
+            SetBrokerageModel(BrokerageName.AlphaStreams);
+
+            // set backtesting parameters
+            SetStartDate(2014, 1, 1);
+            SetCash(1000000);
+
+            // add ticker to universe
+            AddEquity(security, resolution);
+
+            // initialize ticker history
+            var history = History(security, 100, resolution);
+            List<TradeBar> list = new List<TradeBar>();
+            foreach (TradeBar tb in history)
+                list.Add(tb);
+
+            // initialize ATR
+            AverageTrueRange atr = ATR(security, 10);
+
+            // define the zzhl
+            zzhl = new ZigZagHighLow(security, 100, 0.1m, atr, 0.5m, list);
+        }
+
+        /// OnData event is the primary entry point for your algorithm. Each new data point will be pumped in here.
+        /// Slice object keyed by symbol containing the stock data
+        public override void OnData(Slice data)
+        {
+            // updates the zzhl
+            zzhl.update(Securities[security].High, Securities[security].Low);
+
+            // check for position entry
+            if (zzhl.getDirection() && !Portfolio.Invested)
+            {
+                SetHoldings(security, 0.5m);
+            }
+            else if (!zzhl.getDirection() && Portfolio.Invested)
+            {
+                Liquidate(security);
+            }
+        }
+
+        // ZigZagHighLow indicator class
+        // uses default moving average
+        // reference: https://www.investopedia.com/terms/z/zig_zag_indicator.asp
+        public class ZigZagHighLow
+        {
+            // symbol to be observed
+            private string ticker = "";
+            // default indicator length
+            private int length = 100;
+            // percent change: default daily
+            private decimal percent_change = 0.02m;
+            // index of last high retracement
+            private int high_index = 0;
+            // index of last low retracement
+            private int low_index = 0;
+            // direction
+            // true = up, false = down
+            private bool dir = false;
+            // rolling window high values
+            private RollingWindow<decimal> high_values;
+            // rolling window opening values
+            private RollingWindow<decimal> low_values;
+            // ATR indicator
+            private AverageTrueRange atr;
+            // atr reversal calculation
+            private decimal atr_reversal;
+            // nullified
+            private bool nullify = false;
+
+            // default constructor
+            public ZigZagHighLow(string ticker, int length, decimal percent_change, AverageTrueRange atr, decimal atr_reversal, List<TradeBar> history)
+            {
+                // init ticker; default = ""
+                this.ticker = ticker;
+                // init length; default = 100
+                this.length = length;
+                // init percent change; default = 0.0m;
+                this.percent_change = percent_change;
+                // init rolling windows
+                high_values = new RollingWindow<decimal>(length);
+                low_values = new RollingWindow<decimal>(length);
+                // init default value
+                high_values.Add(-1000000.0m);
+                low_values.Add(1000000.0m);
+                // init atr
+                this.atr = atr;
+                this.atr_reversal = atr_reversal;
+                // inits high and low values
+                foreach (TradeBar tb in history)
+                {
+                    high_values.Add(tb.High);
+                    low_values.Add(tb.Low);
+                }
+            }
+
+            // update the values for low and high rolling windows
+            public void update(decimal high, decimal low)
+            {
+                // update indexes
+                high_index++;
+                low_index++;
+                // update RollingWindows
+                high_values.Add(high);
+                low_values.Add(low);
+                checkDir(high, low);
+            }
+
+            // used to update which direction the ticker is moving in
+            private void checkDir(decimal high, decimal low)
+            {
+                // checks for reversal in upward direction
+                if (!dir)
+                {
+                    if (low < ((getHigh() * (1 - percent_change)) - (atr * atr_reversal)))
+                    {
+                        dir = true;
+                        // signal low reversal
+                        // set index for low value to 0
+                        low_index = 0;
+                    }
+                    // checks for reversal in downward direction
+                }
+                else
+                {
+                    if (high > ((getLow() * (1 + percent_change)) + (atr * atr_reversal)))
+                    {
+                        dir = false;
+                        // signal high reversal
+                        // set index for high value to 0
+                        high_index = 0;
+                    }
+                }
+            }
+
+            // returns highest value since last high reversal
+            public decimal getHigh()
+            {
+                if (high_index >= high_values.Count)
+                    high_index = high_values.Count - 1;
+                decimal high = high_values[high_index];
+                for (int i = high_index; i >= 0; i--)
+                    if (high_values[i] > high)
+                    {
+                        high = high_values[i];
+                        high_index = i;
+                    }
+                return high;
+            }
+
+            // returns lowest value since last low reversal
+            public decimal getLow()
+            {
+                if (low_index >= low_values.Count)
+                    low_index = low_values.Count - 1;
+                decimal low = low_values[low_index];
+                for (int i = low_index; i >= 0; i--)
+                    if (low_values[i] < low)
+                    {
+                        low = low_values[i];
+                        low_index = i;
+                    }
+                return low;
+            }
+
+            // gets direction of current stock
+            // true = long; false = short
+            public bool getDirection()
+            {
+                return low_index > high_index;
+            }
+        }
+    }
+}
